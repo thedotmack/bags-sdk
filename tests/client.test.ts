@@ -11,6 +11,7 @@ describe('BagsSDK', () => {
 		expect(sdk.config).toBeDefined();
 		expect(sdk.fee).toBeDefined();
 		expect(sdk.partner).toBeDefined();
+		expect(sdk.appStore).toBeDefined();
 	});
 
 	test('state service shares connection and commitment', () => {
