@@ -3,6 +3,8 @@ import { BaseService } from './base';
 import { derivePartnerMetadataPda, deriveVirtualPoolMetadataPda } from '../utils/app-store';
 import type { CreatePartnerMetadataParams, CreateVirtualPoolMetadataParams, DecodedPartnerMetadata, DecodedVirtualPoolMetadata } from '../types/app-store';
 
+const METADATA_PADDING_SIZE = 96;
+
 export class AppStoreService extends BaseService {
 	constructor(apiKey: string, connection: Connection, commitment: Commitment = 'processed') {
 		super(apiKey, connection, commitment);
@@ -77,7 +79,7 @@ export class AppStoreService extends BaseService {
 	async buildCreatePartnerMetadataInstruction(params: CreatePartnerMetadataParams): Promise<TransactionInstruction> {
 		const instruction = await this.dbcProgram.methods
 			.createPartnerMetadata({
-				padding: new Array(96).fill(0),
+				padding: new Array(METADATA_PADDING_SIZE).fill(0),
 				name: params.name,
 				website: params.website,
 				logo: params.logo,
@@ -94,13 +96,16 @@ export class AppStoreService extends BaseService {
 	/**
 	 * Build the instruction to create virtual pool metadata on-chain.
 	 *
+	 * Note: The `creator` account is resolved from the virtual pool's on-chain data via Anchor relations.
+	 * The transaction must still be signed by the virtual pool's creator.
+	 *
 	 * @param params - The parameters for creating virtual pool metadata
 	 * @returns The transaction instruction
 	 */
 	async buildCreateVirtualPoolMetadataInstruction(params: CreateVirtualPoolMetadataParams): Promise<TransactionInstruction> {
 		const instruction = await this.dbcProgram.methods
 			.createVirtualPoolMetadata({
-				padding: new Array(96).fill(0),
+				padding: new Array(METADATA_PADDING_SIZE).fill(0),
 				name: params.name,
 				website: params.website,
 				logo: params.logo,
