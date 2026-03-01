@@ -32,8 +32,6 @@ export type CreateVirtualPoolMetadataParams = {
 	payer: PublicKey;
 	/** The virtual pool public key */
 	virtualPool: PublicKey;
-	/** The pool creator (signer, must match the virtual pool's creator) */
-	creator: PublicKey;
 	/** Name of the project */
 	name: string;
 	/** Website of the project */

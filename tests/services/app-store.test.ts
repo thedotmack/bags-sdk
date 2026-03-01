@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey } from '@solana/web3.js';
 import { derivePartnerMetadataPda, deriveVirtualPoolMetadataPda } from '../../src/utils/app-store';
+import { AppStoreService } from '../../src/services/app-store';
 import { METEORA_DBC_PROGRAM_ID } from '../../src/constants';
 
 describe('app-store PDA derivation utilities', () => {
@@ -57,5 +58,26 @@ describe('app-store PDA derivation utilities', () => {
 		const pda2 = deriveVirtualPoolMetadataPda(otherPool);
 
 		expect(pda1.equals(pda2)).toBe(false);
+	});
+});
+
+describe('AppStoreService', () => {
+	const feeClaimer = new PublicKey('Fj8j9XScg8jB5TfF5fPK3Qw8pGC66oi7A9phei9anez9');
+	const virtualPool = new PublicKey('So11111111111111111111111111111111111111112');
+	const connection = new Connection('https://api.mainnet-beta.solana.com', 'processed');
+	const service = new AppStoreService('test-api-key', connection);
+
+	test('service derivePartnerMetadataPda delegates to utility and matches', () => {
+		const fromService = service.derivePartnerMetadataPda(feeClaimer);
+		const fromUtil = derivePartnerMetadataPda(feeClaimer);
+
+		expect(fromService.equals(fromUtil)).toBe(true);
+	});
+
+	test('service deriveVirtualPoolMetadataPda delegates to utility and matches', () => {
+		const fromService = service.deriveVirtualPoolMetadataPda(virtualPool);
+		const fromUtil = deriveVirtualPoolMetadataPda(virtualPool);
+
+		expect(fromService.equals(fromUtil)).toBe(true);
 	});
 });
