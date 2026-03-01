@@ -1,8 +1,13 @@
 # App Store API Guide
 
-The `AppStoreService` lets you create and read on-chain metadata for **partners** and **virtual pools** on the Meteora Dynamic Bonding Curve program. This metadata is stored as PDAs (Program Derived Addresses) and includes display info like name, website, and logo.
+The Bags App Store is a marketplace where **partners** list services that token creators can add as fee shareholders. Partners like DividendsBot, Compound Liquidity, and DEX Boosts register their branding, and token creators attach them to their tokens to automatically route a percentage of trading fees to those services.
 
-## Setup
+This guide covers the two roles:
+
+1. **Partners** — Register your service so token creators can discover and add it
+2. **Token creators** — Set display metadata on your token's virtual pool
+
+## Quick Start
 
 ```typescript
 import { BagsSDK } from '@bagsfm/bags-sdk';
@@ -10,115 +15,80 @@ import { Connection, Keypair, PublicKey, sendAndConfirmTransaction, Transaction 
 
 const connection = new Connection('https://mainnet.helius-rpc.com/?api-key=YOUR_KEY');
 const sdk = new BagsSDK('your-bags-api-key', connection, 'confirmed');
-
-// Access the service
-const appStore = sdk.appStore;
 ```
 
-## Partner Metadata
+---
 
-Partner metadata is keyed by a **fee claimer** public key. Each fee claimer can have exactly one partner metadata account on-chain.
+## For Partners: List Your Service in the App Store
 
-### Derive a Partner Metadata PDA
+If you're building a service (a bot, a tool, a social integration) and want token creators to be able to add you as a fee shareholder, you need to register partner metadata on-chain.
 
-Compute the PDA address without making any RPC calls:
+### Register your service
 
-```typescript
-const feeClaimer = new PublicKey('...');
-const pda = appStore.derivePartnerMetadataPda(feeClaimer);
-console.log('Partner metadata PDA:', pda.toBase58());
-```
-
-You can also use the standalone utility directly:
+Your service identity is tied to a **fee claimer** wallet — the same wallet that will receive trading fees when token creators add your service. The metadata you set here (name, website, logo) is what appears in the App Store UI.
 
 ```typescript
-import { derivePartnerMetadataPda } from '@bagsfm/bags-sdk';
+const feeClaimerKeypair = Keypair.fromSecretKey(/* your service wallet */);
 
-const pda = derivePartnerMetadataPda(feeClaimer);
-```
-
-### Read Partner Metadata
-
-Fetch the on-chain account data. Returns `null` if no metadata has been created yet:
-
-```typescript
-const metadata = await appStore.getPartnerMetadata(feeClaimer);
-
-if (metadata) {
-  console.log('Partner name:', metadata.name);
-  console.log('Website:', metadata.website);
-  console.log('Logo:', metadata.logo);
-  console.log('Fee claimer:', metadata.feeClaimer.toBase58());
-} else {
-  console.log('No metadata found for this partner');
-}
-```
-
-### Create Partner Metadata
-
-Build a transaction instruction to create partner metadata on-chain. The `feeClaimer` must sign the transaction:
-
-```typescript
-const feeClaimerKeypair = Keypair.fromSecretKey(/* ... */);
-const payer = feeClaimerKeypair.publicKey; // can be any funded wallet
-
-const instruction = await appStore.buildCreatePartnerMetadataInstruction({
-  payer,
+const instruction = await sdk.appStore.buildCreatePartnerMetadataInstruction({
+  payer: feeClaimerKeypair.publicKey,
   feeClaimer: feeClaimerKeypair.publicKey,
-  name: 'My Partner App',
-  website: 'https://example.com',
-  logo: 'https://example.com/logo.png',
+  name: 'DividendsBot',
+  website: 'https://dividendsbot.com',
+  logo: 'https://dividendsbot.com/logo.png',
 });
 
-// Add to a transaction and send
 const tx = new Transaction().add(instruction);
 await sendAndConfirmTransaction(connection, tx, [feeClaimerKeypair]);
 ```
 
-## Virtual Pool Metadata
+The fee claimer wallet must sign the transaction. This is the same wallet you use when token creators configure fee sharing — it links your App Store listing to your fee share configuration.
 
-Virtual pool metadata is keyed by a **virtual pool** public key. Only the pool's original creator can create metadata for it.
-
-### Derive a Virtual Pool Metadata PDA
+### Check if your service is already registered
 
 ```typescript
-const virtualPool = new PublicKey('...');
-const pda = appStore.deriveVirtualPoolMetadataPda(virtualPool);
-console.log('Pool metadata PDA:', pda.toBase58());
+const feeClaimer = new PublicKey('your-fee-claimer-wallet');
+const metadata = await sdk.appStore.getPartnerMetadata(feeClaimer);
+
+if (metadata) {
+  console.log('Listed as:', metadata.name);
+  console.log('Website:', metadata.website);
+  console.log('Logo:', metadata.logo);
+} else {
+  console.log('Not registered yet');
+}
+```
+
+### Look up the on-chain address for your listing
+
+If you need the PDA address (e.g. for on-chain verification or debugging), you can derive it without an RPC call:
+
+```typescript
+const pda = sdk.appStore.derivePartnerMetadataPda(feeClaimer);
 ```
 
 Or use the standalone utility:
 
 ```typescript
-import { deriveVirtualPoolMetadataPda } from '@bagsfm/bags-sdk';
-
-const pda = deriveVirtualPoolMetadataPda(virtualPool);
+import { derivePartnerMetadataPda } from '@bagsfm/bags-sdk';
+const pda = derivePartnerMetadataPda(feeClaimer);
 ```
 
-### Read Virtual Pool Metadata
+---
+
+## For Token Creators: Set Your Token's Pool Metadata
+
+When you launch a token on Bags, it creates a virtual pool. You can attach display metadata (name, website, logo) to that pool. This is separate from the token's SPL metadata — it describes the project behind the token.
+
+### Set metadata on your pool
+
+Only the wallet that originally created the pool can set its metadata. The creator is verified automatically from the pool's on-chain data — you just need to sign the transaction with the same wallet.
 
 ```typescript
-const metadata = await appStore.getVirtualPoolMetadata(virtualPool);
+const creatorKeypair = Keypair.fromSecretKey(/* the wallet that launched the token */);
+const virtualPool = new PublicKey('your-virtual-pool-address');
 
-if (metadata) {
-  console.log('Project name:', metadata.name);
-  console.log('Website:', metadata.website);
-  console.log('Logo:', metadata.logo);
-  console.log('Virtual pool:', metadata.virtualPool.toBase58());
-} else {
-  console.log('No metadata found for this pool');
-}
-```
-
-### Create Virtual Pool Metadata
-
-Build a transaction instruction to create metadata for a virtual pool. The transaction must be signed by the pool's original **creator** (resolved automatically from the pool's on-chain data):
-
-```typescript
-const creatorKeypair = Keypair.fromSecretKey(/* ... */);
-const virtualPool = new PublicKey('...');
-
-const instruction = await appStore.buildCreateVirtualPoolMetadataInstruction({
+const instruction = await sdk.appStore.buildCreateVirtualPoolMetadataInstruction({
   payer: creatorKeypair.publicKey,
   virtualPool,
   name: 'My Token Project',
@@ -126,64 +96,90 @@ const instruction = await appStore.buildCreateVirtualPoolMetadataInstruction({
   logo: 'https://myproject.xyz/logo.png',
 });
 
-// The creator must sign the transaction
 const tx = new Transaction().add(instruction);
 await sendAndConfirmTransaction(connection, tx, [creatorKeypair]);
 ```
 
-> **Note:** The `creator` account is resolved automatically by Anchor from the virtual pool's on-chain data. You do not need to pass it explicitly, but the creator's keypair must sign the transaction.
+### Read existing pool metadata
+
+```typescript
+const virtualPool = new PublicKey('...');
+const metadata = await sdk.appStore.getVirtualPoolMetadata(virtualPool);
+
+if (metadata) {
+  console.log('Project:', metadata.name);
+  console.log('Website:', metadata.website);
+  console.log('Logo:', metadata.logo);
+} else {
+  console.log('No metadata set for this pool');
+}
+```
+
+### Look up the on-chain address
+
+```typescript
+const pda = sdk.appStore.deriveVirtualPoolMetadataPda(virtualPool);
+```
+
+---
+
+## How It All Fits Together
+
+The App Store metadata works alongside the existing **partner** and **fee share** services in the SDK. Here's the typical flow:
+
+```
+1. Partner registers in App Store         →  sdk.appStore.buildCreatePartnerMetadataInstruction()
+2. Partner creates a fee config account   →  sdk.partner.getPartnerConfigCreationTransaction()
+3. Token creator launches a token         →  sdk.tokenLaunch.launchToken()
+4. Creator adds partners as fee sharers   →  sdk.config.createBagsFeeShareConfig()
+5. Trading fees accumulate to partners    →  (automatic)
+6. Partner claims earned fees             →  sdk.partner.getPartnerConfigClaimTransactions()
+```
+
+The App Store metadata (step 1) is the **branding layer** — it gives partners a name, logo, and website so they show up in the Bags UI. The partner config (step 2) is the **financial layer** — it tracks accumulated and claimed fees.
+
+---
 
 ## Type Reference
 
-### `DecodedPartnerMetadata`
-
-```typescript
-type DecodedPartnerMetadata = {
-  feeClaimer: PublicKey;
-  name: string;
-  website: string;
-  logo: string;
-};
-```
-
-### `DecodedVirtualPoolMetadata`
-
-```typescript
-type DecodedVirtualPoolMetadata = {
-  virtualPool: PublicKey;
-  name: string;
-  website: string;
-  logo: string;
-};
-```
-
 ### `CreatePartnerMetadataParams`
 
-```typescript
-type CreatePartnerMetadataParams = {
-  payer: PublicKey;       // Wallet funding account creation
-  feeClaimer: PublicKey;  // Fee claimer key (must sign)
-  name: string;          // Partner display name
-  website: string;       // Partner website URL
-  logo: string;          // Partner logo URL
-};
-```
+| Field        | Type        | Description                                |
+|--------------|-------------|--------------------------------------------|
+| `payer`      | `PublicKey`  | Wallet funding the account creation        |
+| `feeClaimer` | `PublicKey`  | Fee claimer wallet (must sign)             |
+| `name`       | `string`     | Service name shown in the App Store        |
+| `website`    | `string`     | Service website URL                        |
+| `logo`       | `string`     | Service logo URL                           |
 
 ### `CreateVirtualPoolMetadataParams`
 
-```typescript
-type CreateVirtualPoolMetadataParams = {
-  payer: PublicKey;       // Wallet funding account creation
-  virtualPool: PublicKey; // Virtual pool address
-  name: string;          // Project display name
-  website: string;       // Project website URL
-  logo: string;          // Project logo URL
-};
-```
+| Field         | Type        | Description                                |
+|---------------|-------------|--------------------------------------------|
+| `payer`       | `PublicKey`  | Wallet funding the account creation        |
+| `virtualPool` | `PublicKey`  | The virtual pool address                   |
+| `name`        | `string`     | Project name                               |
+| `website`     | `string`     | Project website URL                        |
+| `logo`        | `string`     | Project logo URL                           |
 
-## PDA Seeds
+### `DecodedPartnerMetadata`
 
-For reference, the PDA seeds used:
+Returned by `getPartnerMetadata()`:
 
-- **Partner metadata:** `["partner_metadata", feeClaimer]` under the Meteora DBC program
-- **Virtual pool metadata:** `["virtual_pool_metadata", virtualPool]` under the Meteora DBC program
+| Field        | Type        | Description                      |
+|--------------|-------------|----------------------------------|
+| `feeClaimer` | `PublicKey`  | The fee claimer wallet           |
+| `name`       | `string`     | Service name                     |
+| `website`    | `string`     | Service website                  |
+| `logo`       | `string`     | Service logo URL                 |
+
+### `DecodedVirtualPoolMetadata`
+
+Returned by `getVirtualPoolMetadata()`:
+
+| Field         | Type        | Description                     |
+|---------------|-------------|---------------------------------|
+| `virtualPool` | `PublicKey`  | The virtual pool address        |
+| `name`        | `string`     | Project name                    |
+| `website`     | `string`     | Project website                 |
+| `logo`        | `string`     | Project logo URL                |
